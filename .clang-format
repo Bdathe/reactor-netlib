@@ -1,0 +1,18 @@
+# 以 Google 风格为基础，按 docs/04-engineering.md 的约定微调
+BasedOnStyle: Google
+Language: Cpp
+Standard: c++17
+
+IndentWidth: 2
+ColumnLimit: 100
+# 让 public:/private: 与 class 关键字对齐
+AccessModifierOffset: -2
+
+# 统一写成 int* p，不根据已有代码推断
+DerivePointerAlignment: false
+PointerAlignment: Left
+
+# 短函数只有写在类定义内部时才允许放在一行
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false

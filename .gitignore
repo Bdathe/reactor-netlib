@@ -1,0 +1,20 @@
+# 个人学习文档与 AI 协作说明
+/CLAUDE.md
+/docs/
+
+# 构建产物（所有配置）
+/build/
+
+# bear 生成，依赖本机绝对路径，换配置后重新生成
+/compile_commands.json
+
+# clangd 的索引缓存
+/.cache/
+
+# perf record 的原始数据
+perf.data
+perf.data.old
+
+# core dump
+/core
+core.[0-9]*
