@@ -1,6 +1,8 @@
 # Variable
-BUILD ?= debug
-SAN   ?=
+BUILD       ?= debug
+SAN         ?=
+V           ?= 0
+GTEST_FLAGS ?= --gtest_brief=1
 
 # Toolchain
 AR       := ar
@@ -16,6 +18,16 @@ else ifeq ($(BUILD),relwithdebinfo)
   CXXFLAGS += -O2 -g -fno-omit-frame-pointer
 else
   $(error Invalid BUILD '$(BUILD)'. Valid parameters are: debug, release, relwithdebinfo)
+endif
+
+# Output
+# 默认每一步只打印一行"动作 + 文件"；make V=1 显示完整命令
+ifeq ($(V),1)
+  Q   :=
+  MSG := @true
+else
+  Q   := @
+  MSG := @printf '  %-5s %s\n'
 endif
 
 # Directory
@@ -53,23 +65,29 @@ DEPS      := $(patsubst %.o,%.d,$(TEST_OBJS) $(LIB_OBJS))
 all: $(LIB) $(TEST_BINS)
 
 test: $(TEST_BINS)
-	@for e in $(TEST_BINS); do $$e || exit 1; done
+	@for e in $(TEST_BINS); do \
+	  printf '  %-5s %s\n' TEST $$e; \
+	  $$e $(GTEST_FLAGS) || exit 1; \
+	done
 
 # Library
 $(LIB): $(LIB_OBJS)
 	@mkdir -p $(@D)
 	@rm -f $@
-	$(AR) rcs $@ $^
+	$(MSG) AR $@
+	$(Q)$(AR) rcs $@ $^
 
 # Link
 $(TEST_BINS): $(OUT_DIR)/%: $(OBJ_DIR)/%.o $(LIB)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $^ $(LDLIBS) -o $@
+	$(MSG) LD $@
+	$(Q)$(CXX) $(CXXFLAGS) $^ $(LDLIBS) -o $@
 
 # Compile
 $(OBJ_DIR)/%.o: %.cc
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -c -MMD -MP $< -o $@
+	$(MSG) CXX $<
+	$(Q)$(CXX) $(CXXFLAGS) -c -MMD -MP $< -o $@
 
 # Tail
 -include $(DEPS)
@@ -79,9 +97,11 @@ $(OBJ_DIR)/%.o: %.cc
 # 防御：OUT_DIR 必须形如 build/xxx，否则拒绝执行，避免变量意外为空时误删
 clean:
 	@case "$(OUT_DIR)" in build/?*) ;; *) echo "clean: refusing to remove '$(OUT_DIR)'" >&2; exit 1;; esac
-	rm -rf $(OUT_DIR)
+	$(MSG) CLEAN $(OUT_DIR)
+	$(Q)rm -rf $(OUT_DIR)
 
 distclean:
-	rm -rf build
+	$(MSG) CLEAN build
+	$(Q)rm -rf build
 
 .PHONY: all test clean distclean
