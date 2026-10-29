@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "netlib/base/timestamp.h"
+#include "netlib/net/event_loop.h"
 
 namespace netlib {
 
@@ -56,6 +57,14 @@ bool Channel::IsWriting() const {
 
 bool Channel::IsReading() const {
   return interested_events_ & kReadEvent;
+}
+
+void Channel::Remove() {
+  loop_->RemoveChannel(this);
+}
+
+void Channel::Update() {
+  loop_->UpdateChannel(this);
 }
 
 void Channel::HandleEventWithGuard(Timestamp receive_time) {

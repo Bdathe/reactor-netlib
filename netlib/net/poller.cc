@@ -13,6 +13,7 @@
 #include "netlib/base/logging.h"
 #include "netlib/base/timestamp.h"
 #include "netlib/net/channel.h"
+#include "netlib/net/event_loop.h"
 
 namespace netlib {
 
@@ -59,6 +60,8 @@ Timestamp Poller::Poll(int timeout_ms, ChannelList* active_channels) {
 }
 
 void Poller::UpdateChannel(Channel* channel) {
+  owner_loop_->AssertInLoopThread();
+
   Channel::PollerState state = channel->poller_state();
 
   if (state == Channel::PollerState::kNew) {
@@ -80,6 +83,8 @@ void Poller::UpdateChannel(Channel* channel) {
 }
 
 void Poller::RemoveChannel(Channel* channel) {
+  owner_loop_->AssertInLoopThread();
+
   int fd = channel->fd();
   channels_.erase(fd);
 
@@ -92,6 +97,8 @@ void Poller::RemoveChannel(Channel* channel) {
 }
 
 bool Poller::HasChannel(Channel* channel) const {
+  owner_loop_->AssertInLoopThread();
+
   int fd = channel->fd();
   auto it = channels_.find(fd);
 

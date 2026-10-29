@@ -46,6 +46,7 @@ public:
   int fd() const { return fd_; }
   uint32_t interested_events() const { return interested_events_; }
   PollerState poller_state() const { return poller_state_; }
+  EventLoop* owner_loop() const { return loop_; }
 
   void set_poller_state(PollerState poller_state) { poller_state_ = poller_state; }
   void set_ready_events(uint32_t ready_events) { ready_events_ = ready_events; }
