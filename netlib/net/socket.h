@@ -54,4 +54,7 @@ private:
 /// 创建非阻塞、close-on-exec 的 TCP socket，失败时终止程序
 int CreateNonblockingSocketOrDie();
 
+/// 获取连接的本地地址，失败时返回全零地址
+InetAddress GetLocalAddr(int sockfd);
+
 }  // namespace netlib

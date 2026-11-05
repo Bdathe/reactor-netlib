@@ -90,4 +90,15 @@ int CreateNonblockingSocketOrDie() {
   return fd;
 }
 
+InetAddress GetLocalAddr(int sockfd) {
+  sockaddr_in addr{};
+  socklen_t len = sizeof(addr);
+
+  if (::getsockname(sockfd, reinterpret_cast<sockaddr*>(&addr), &len) == -1) {
+    LOG_SYSERR << "getsockname(" << sockfd << ") failed";
+  }
+
+  return InetAddress(addr);
+}
+
 }  // namespace netlib

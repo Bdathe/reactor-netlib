@@ -5,6 +5,8 @@
 
 #include "netlib/net/event_loop.h"
 
+#include <signal.h>
+
 #include <memory>
 #include <thread>
 
@@ -22,6 +24,19 @@ namespace {
 thread_local EventLoop* t_loop_in_this_thread = nullptr;
 
 constexpr int kPollTimeMs = 10000;  // 10s
+
+class IgnoreSigPipe {
+public:
+  IgnoreSigPipe() {
+    ::signal(SIGPIPE, SIG_IGN);
+  }
+};
+
+// 收到对端 RST 之后再 write，内核会发送 SIGPIPE，默认动作是终止进程
+// 忽略后，write 改为返回 -1、errno 为 EPIPE，由 SendInLoop 设置 fault_error 处理
+// 放在 event_loop.cc 里：每个程序都要创建 EventLoop，链接器一定会拉入 event_loop.o，
+// 这个全局对象才会在 main 之前构造（放进单独的 .o，静态库链接时不会被拉入）
+IgnoreSigPipe ignore_sigpipe;
 
 }  // namespace
 
