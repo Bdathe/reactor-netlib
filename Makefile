@@ -32,6 +32,7 @@ endif
 
 # Directory
 TEST_SRC_DIR := tests
+EXAMPLE_SRC_DIR := examples bench
 LIB_SRC_DIR  := netlib
 ifeq ($(SAN),)
   OUT_DIR  := build/$(BUILD)
@@ -50,19 +51,24 @@ OBJ_DIR      := $(OUT_DIR)/obj
 # Sources files
 TEST_SRCS := $(shell find $(TEST_SRC_DIR) -type f -name '*.cc')
 LIB_SRCS  := $(shell find $(LIB_SRC_DIR) -type f -name '*.cc')
+EXAMPLE_SRCS := $(shell find $(EXAMPLE_SRC_DIR) -type f -name '*.cc')
 
 # Object comprehension
 TEST_OBJS := $(patsubst %.cc,$(OBJ_DIR)/%.o,$(TEST_SRCS))
 LIB_OBJS  := $(patsubst %.cc,$(OBJ_DIR)/%.o,$(LIB_SRCS))
+EXAMPLE_OBJS := $(patsubst %.cc,$(OBJ_DIR)/%.o,$(EXAMPLE_SRCS))
 
 # Outputs
 TEST_BINS := $(patsubst %.cc,$(OUT_DIR)/%,$(TEST_SRCS))
+EXAMPLE_BINS := $(patsubst %.cc,$(OUT_DIR)/%,$(EXAMPLE_SRCS))
 LIB       := $(OUT_DIR)/lib/libnetlib.a
-DEPS      := $(patsubst %.o,%.d,$(TEST_OBJS) $(LIB_OBJS))
+DEPS      := $(patsubst %.o,%.d,$(TEST_OBJS) $(LIB_OBJS) $(EXAMPLE_OBJS))
 
 # Phony target
 .DEFAULT_GOAL := all
-all: $(LIB) $(TEST_BINS)
+all: $(LIB) $(TEST_BINS) $(EXAMPLE_BINS)
+
+examples: $(EXAMPLE_BINS)
 
 test: $(TEST_BINS)
 	@for e in $(TEST_BINS); do \
@@ -82,6 +88,12 @@ $(TEST_BINS): $(OUT_DIR)/%: $(OBJ_DIR)/%.o $(LIB)
 	@mkdir -p $(@D)
 	$(MSG) LD $@
 	$(Q)$(CXX) $(CXXFLAGS) $^ $(LDLIBS) -o $@
+
+# 示例程序和压测工具（examples/、bench/）只链接 libnetlib.a，不链接 gtest
+$(EXAMPLE_BINS): $(OUT_DIR)/%: $(OBJ_DIR)/%.o $(LIB)
+	@mkdir -p $(@D)
+	$(MSG) LD $@
+	$(Q)$(CXX) $(CXXFLAGS) $^ -o $@
 
 # Compile
 $(OBJ_DIR)/%.o: %.cc
@@ -104,4 +116,4 @@ distclean:
 	$(MSG) CLEAN build
 	$(Q)rm -rf build
 
-.PHONY: all test clean distclean
+.PHONY: all test examples clean distclean
