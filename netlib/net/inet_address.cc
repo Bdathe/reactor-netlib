@@ -16,7 +16,7 @@ std::optional<InetAddress> InetAddress::FromIpPort(const std::string& ip, uint16
   if (ret == 0) {
     return std::nullopt;
   } else if (ret == -1) {
-    LOG_SYSFATAL << "inet_pton failed";
+    LOG_SYSFATAL << "inet_pton failed, ip=" << ip;
   }
 
   return address;

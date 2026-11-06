@@ -38,7 +38,7 @@ TcpConnection::TcpConnection(EventLoop* loop, std::string name, int sockfd,
 TcpConnection::~TcpConnection() {
   assert(state_ == State::kDisconnected);
 
-  LOG_DEBUG << "TcpConnection destroyed: " << name_ << " fd=" << socket_.fd();
+  LOG_DEBUG << "[" << name_ << "] destroyed, fd=" << socket_.fd();
 }
 
 void TcpConnection::ConnectEstablished() {
@@ -111,7 +111,7 @@ void TcpConnection::HandleRead(Timestamp receive_time) {
     HandleClose();
   } else {
     errno = saved_errno;
-    LOG_SYSERR << "connection: " << name_ << " ReadFd failed";
+    LOG_SYSERR << "[" << name_ << "] read failed, fd=" << socket_.fd();
     HandleError();
   }
 }
@@ -141,10 +141,10 @@ void TcpConnection::HandleError() {
   int optval = 0;
   socklen_t optlen = sizeof(optval);
   if (::getsockopt(socket_.fd(), SOL_SOCKET, SO_ERROR, &optval, &optlen) == -1) {
-    LOG_SYSERR << "connection: " << name_ << " getsockopt failed";
+    LOG_SYSERR << "[" << name_ << "] getsockopt(SO_ERROR) failed, fd=" << socket_.fd();
   } else {
     errno = optval;
-    LOG_SYSERR << "connection: " << name_ << " SO_ERROR failed";
+    LOG_SYSERR << "[" << name_ << "] socket error, fd=" << socket_.fd();
   }
 }
 
@@ -152,9 +152,8 @@ void TcpConnection::HandleWrite() {
   loop_->AssertInLoopThread();
 
   if (!channel_.IsWriting()) {
-    LOG_TRACE
-        << "connection: " << name_
-        << " the connection has already been closed, or the data has already been fully written";
+    LOG_TRACE << "[" << name_
+              << "] not watching EPOLLOUT, ignore writable event, fd=" << socket_.fd();
     return;
   }
 
@@ -176,7 +175,7 @@ void TcpConnection::HandleWrite() {
       }
     }
   } else {
-    LOG_SYSERR << "connection: " << name_ << " write failed";
+    LOG_SYSERR << "[" << name_ << "] write failed, fd=" << socket_.fd();
   }
 }
 
@@ -184,7 +183,7 @@ void TcpConnection::SendInLoop(const char* data, std::size_t len) {
   loop_->AssertInLoopThread();
 
   if (state_ == State::kDisconnected) {
-    LOG_WARN << "connection: " << name_ << " already disconnected";
+    LOG_WARN << "[" << name_ << "] already disconnected, give up sending, len=" << len;
     return;
   }
 
@@ -205,7 +204,7 @@ void TcpConnection::SendInLoop(const char* data, std::size_t len) {
 
       int saved_errno = errno;
       if (saved_errno != EWOULDBLOCK) {
-        LOG_SYSERR << "connection: " << name_ << " write(socket_.fd) failed";
+        LOG_SYSERR << "[" << name_ << "] write failed, fd=" << socket_.fd();
         if (saved_errno == EPIPE || saved_errno == ECONNRESET) {
           fault_error = true;
         }

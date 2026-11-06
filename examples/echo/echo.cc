@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
   uint16_t port = 8080;
   if (argc == 2) {
     if (!ParsePort(argv[1], &port)) {
-      LOG_ERROR << "invalid port: " << argv[1] << " (expect 1-65535)";
+      LOG_ERROR << "invalid port, got=" << argv[1] << ", expect=1-65535";
       return EXIT_FAILURE;
     }
   } else if (argc != 1) {
@@ -53,8 +53,8 @@ int main(int argc, char* argv[]) {
 
   // 设置回调
   server.set_connection_callback([](const netlib::TcpConnectionPtr& c) {
-    LOG_INFO << "connection: " << c->name() << ", peer address: " << c->peer_addr().ToIpPort()
-             << " state: " << (c->connected() ? "connected" : "disconnected");
+    LOG_INFO << "[" << c->name() << "] " << (c->connected() ? "up" : "down")
+             << ", peer=" << c->peer_addr().ToIpPort();
   });
 
   server.set_message_callback([](const netlib::TcpConnectionPtr& c, netlib::Buffer* buf,

@@ -49,7 +49,8 @@ void TcpServer::NewConnection(int sockfd, const InetAddress& peer_addr) {
   loop_->AssertInLoopThread();
   std::string conn_name = name_ + "-" + ip_port_ + "#" + std::to_string(next_connection_id_);
   ++next_connection_id_;
-  LOG_INFO << conn_name << ", peer: " << peer_addr.ToIpPort();
+  LOG_INFO << "[" << conn_name << "] new connection, peer=" << peer_addr.ToIpPort()
+           << ", fd=" << sockfd;
 
   InetAddress local_addr = GetLocalAddr(sockfd);
 
@@ -72,7 +73,7 @@ void TcpServer::NewConnection(int sockfd, const InetAddress& peer_addr) {
 void TcpServer::RemoveConnection(const TcpConnectionPtr& conn) {
   loop_->AssertInLoopThread();
 
-  LOG_INFO << conn->name() << " has removed";
+  LOG_INFO << "[" << conn->name() << "] connection removed";
   [[maybe_unused]] std::size_t ret = connection_table_.erase(conn->name());
   assert(ret == 1);
 

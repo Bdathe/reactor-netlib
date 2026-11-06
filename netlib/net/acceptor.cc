@@ -40,7 +40,7 @@ Acceptor::~Acceptor() {
   accept_channel_.Remove();      // 把 Channel 从 Poller 里移除
   if (idle_fd_ >= 0) {
     if (::close(idle_fd_) == -1) {
-      LOG_SYSERR << "close(idle_fd_) failed";
+      LOG_SYSERR << "close failed, idle_fd=" << idle_fd_;
     }
   }
 }
@@ -65,27 +65,27 @@ void Acceptor::HandleRead(Timestamp /*receive_time*/) {
   if (connfd < 0) {
     int saved_errno = errno;
 
-    LOG_SYSERR << "Accept failed";
+    LOG_SYSERR << "accept4 failed, listenfd=" << accept_socket_.fd();
 
     if (saved_errno == EMFILE) {
       if (idle_fd_ >= 0) {
         if (::close(idle_fd_) == -1) {
-          LOG_SYSERR << "close(idle_fd_) failed";
+          LOG_SYSERR << "close failed, idle_fd=" << idle_fd_;
         }
       }
 
       int fd = ::accept(accept_socket_.fd(), nullptr, nullptr);
       if (fd >= 0) {
         if (::close(fd) == -1) {
-          LOG_SYSERR << "close(accepted fd) failed";
+          LOG_SYSERR << "close rejected connection failed, fd=" << fd;
         }
       } else {
-        LOG_SYSERR << "accept failed";
+        LOG_SYSERR << "accept failed while handling EMFILE, listenfd=" << accept_socket_.fd();
       }
 
       idle_fd_ = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
       if (idle_fd_ == -1) {
-        LOG_SYSERR << "open(/dev/null) failed";
+        LOG_SYSERR << "open(/dev/null) failed, idle fd is not restored";
       }
     }
   } else {
@@ -93,7 +93,7 @@ void Acceptor::HandleRead(Timestamp /*receive_time*/) {
       new_connection_callback_(connfd, peer_addr);
     } else {
       if (::close(connfd) == -1) {
-        LOG_SYSERR << "close(connfd) failed";
+        LOG_SYSERR << "close failed, connfd=" << connfd;
       }
     }
   }

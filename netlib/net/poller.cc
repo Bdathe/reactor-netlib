@@ -32,7 +32,7 @@ Poller::Poller(EventLoop* loop)
 
 Poller::~Poller() {
   if (::close(epfd_) == -1) {
-    LOG_SYSERR << "close failed";
+    LOG_SYSERR << "close failed, epfd=" << epfd_;
   }
 }
 
@@ -48,11 +48,11 @@ Timestamp Poller::Poll(int timeout_ms, ChannelList* active_channels) {
       events_.resize(events_.size() * 2);
     }
   } else if (n == 0) {
-    LOG_TRACE << "no events";
+    LOG_TRACE << "epoll_wait timed out, epfd=" << epfd_;
   } else {
     if (saved_errno != EINTR) {
       errno = saved_errno;
-      LOG_SYSERR << "epoll_wait failed";
+      LOG_SYSERR << "epoll_wait failed, epfd=" << epfd_;
     }
   }
 
@@ -121,11 +121,11 @@ void Poller::UpdateEpoll(int operation, Channel* channel) {
 
   if (::epoll_ctl(epfd_, operation, fd, &event) == -1) {
     if (operation == EPOLL_CTL_DEL) {
-      LOG_SYSERR << "epoll_ctl DEL failed, fd = " << fd;
+      LOG_SYSERR << "epoll_ctl(DEL) failed, fd=" << fd;
     } else if (operation == EPOLL_CTL_ADD) {
-      LOG_SYSFATAL << "epoll_ctl ADD failed, fd = " << fd;
+      LOG_SYSFATAL << "epoll_ctl(ADD) failed, fd=" << fd;
     } else if (operation == EPOLL_CTL_MOD) {
-      LOG_SYSFATAL << "epoll_ctl MOD failed, fd = " << fd;
+      LOG_SYSFATAL << "epoll_ctl(MOD) failed, fd=" << fd;
     }
   }
 }

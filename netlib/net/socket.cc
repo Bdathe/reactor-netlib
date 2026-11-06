@@ -17,19 +17,19 @@ namespace netlib {
 
 Socket::~Socket() {
   if (::close(fd_) == -1) {
-    LOG_SYSERR << "close failed";
+    LOG_SYSERR << "close failed, fd=" << fd_;
   }
 }
 
 void Socket::BindAddress(const InetAddress& addr) {
   if (::bind(fd_, addr.GetSockAddr(), sizeof(sockaddr_in)) == -1) {
-    LOG_SYSFATAL << "bind failed";
+    LOG_SYSFATAL << "bind failed, fd=" << fd_ << ", addr=" << addr.ToIpPort();
   }
 }
 
 void Socket::Listen() {
   if (::listen(fd_, SOMAXCONN) == -1) {
-    LOG_SYSFATAL << "listen failed";
+    LOG_SYSFATAL << "listen failed, fd=" << fd_;
   }
 }
 
@@ -52,7 +52,7 @@ void Socket::SetReuseAddr(bool on) {
   int optval = on ? 1 : 0;
   // SO_REUSEADDR 是 socket 层的通用选项，层写 SOL_SOCKET
   if (::setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) == -1) {
-    LOG_SYSERR << "setsockopt(SO_REUSEADDR) failed";
+    LOG_SYSERR << "setsockopt(SO_REUSEADDR) failed, fd=" << fd_;
   }
 }
 
@@ -60,7 +60,7 @@ void Socket::SetKeepAlive(bool on) {
   int optval = on ? 1 : 0;
   // SO_KEEPALIVE 是 socket 层的通用选项，层写 SOL_SOCKET
   if (::setsockopt(fd_, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) == -1) {
-    LOG_SYSERR << "setsockopt(SO_KEEPALIVE) failed";
+    LOG_SYSERR << "setsockopt(SO_KEEPALIVE) failed, fd=" << fd_;
   }
 }
 
@@ -68,13 +68,13 @@ void Socket::SetTcpNoDelay(bool on) {
   int optval = on ? 1 : 0;
   // TCP_NODELAY 是 TCP 协议自己的选项，层写 IPPROTO_TCP
   if (::setsockopt(fd_, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval)) == -1) {
-    LOG_SYSERR << "setsockopt(TCP_NODELAY) failed";
+    LOG_SYSERR << "setsockopt(TCP_NODELAY) failed, fd=" << fd_;
   }
 }
 
 void Socket::ShutdownWrite() {
   if (::shutdown(fd_, SHUT_WR) == -1) {
-    LOG_SYSERR << "shutdown(SHUT_WR) failed";
+    LOG_SYSERR << "shutdown(SHUT_WR) failed, fd=" << fd_;
   }
 }
 
@@ -95,7 +95,7 @@ InetAddress GetLocalAddr(int sockfd) {
   socklen_t len = sizeof(addr);
 
   if (::getsockname(sockfd, reinterpret_cast<sockaddr*>(&addr), &len) == -1) {
-    LOG_SYSERR << "getsockname(" << sockfd << ") failed";
+    LOG_SYSERR << "getsockname failed, fd=" << sockfd;
   }
 
   return InetAddress(addr);

@@ -27,9 +27,7 @@ constexpr int kPollTimeMs = 10000;  // 10s
 
 class IgnoreSigPipe {
 public:
-  IgnoreSigPipe() {
-    ::signal(SIGPIPE, SIG_IGN);
-  }
+  IgnoreSigPipe() { ::signal(SIGPIPE, SIG_IGN); }
 };
 
 // 收到对端 RST 之后再 write，内核会发送 SIGPIPE，默认动作是终止进程
@@ -46,7 +44,7 @@ EventLoop::EventLoop()
       thread_id_(std::this_thread::get_id()),
       poller_(std::make_unique<Poller>(this)) {
   if (t_loop_in_this_thread) {
-    LOG_FATAL << "attempt to create a second EventLoop in a single thread";
+    LOG_FATAL << "cannot create a second EventLoop in this thread";
   }
 
   t_loop_in_this_thread = this;
@@ -60,7 +58,7 @@ void EventLoop::Loop() {
   AssertInLoopThread();
 
   if (looping_) {
-    LOG_FATAL << "cannot enter the Loop more than once";
+    LOG_FATAL << "Loop() is already running";
   }
 
   looping_ = true;
@@ -107,12 +105,12 @@ bool EventLoop::HasChannel(Channel* channel) const {
 }
 
 void EventLoop::AbortNotInLoopThread() const {
-  LOG_FATAL << "this thread ID = " << std::this_thread::get_id()
-            << ", EventLoop's owning thread ID = " << thread_id_;
+  LOG_FATAL << "EventLoop used outside its owning thread, owning thread=" << thread_id_
+            << ", current thread=" << std::this_thread::get_id();
 }
 
 void EventLoop::AbortChannelNotInLoop() const {
-  LOG_FATAL << "the channel does not belong to this EventLoop";
+  LOG_FATAL << "channel does not belong to this EventLoop";
 }
 
 }  // namespace netlib
