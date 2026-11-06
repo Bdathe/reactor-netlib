@@ -1,0 +1,15 @@
+# M2 EMFILE 实验：Acceptor 的 idle fd 技巧（2026-11-06）
+# 条件与 M1 实验 4e 相同：fd 上限 10，一次建立 8 个连接并保持 30 秒
+# 服务器：prlimit --nofile=10 ./build/debug/examples/echo/echo 8080 2> /tmp/emfile.log
+# 客户端：python3 experiments/tools/burst_connect.py 8 30 8080
+
+                         有 idle fd（M2 echo）   没有 idle fd（M1 实验 4e）
+服务器打开的 fd          10                      10
+保持住的连接             4                       5
+LISTEN 的 Recv-Q         0                       3
+Too many open files      4 行，不再增长          1300 多万行，持续增长
+CPU                      0.0%                    一个核跑满
+
+# 起始 6 个 fd：0/1/2、epoll 3、listenfd 4、/dev/null 5 → 只剩 4 个名额给连接（代价：比 4e 少服务 1 个）
+# 第 5～8 个连接：EMFILE → 关 idle fd → accept → 立即 close（客户端收到 FIN）→ 重新打开 /dev/null；每个连接 1 行日志
+# 全连接队列被清空，listenfd 不再可读，LT 不会反复通知
