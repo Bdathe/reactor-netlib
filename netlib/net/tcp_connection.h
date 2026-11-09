@@ -28,6 +28,7 @@ class TcpConnection : Noncopyable, public std::enable_shared_from_this<TcpConnec
 public:
   static constexpr std::size_t kDefaultHighWaterMark = 64 * 1024 * 1024;  // 64 MB
 
+  /// 接管 sockfd 的所有权，注册 Channel 的四个回调。状态为 kConnecting，还没有进入 epoll
   TcpConnection(EventLoop* loop, std::string name, int sockfd, const InetAddress& local_addr,
                 const InetAddress& peer_addr);
   ~TcpConnection();
@@ -49,16 +50,25 @@ public:
     high_water_mark_callback_ = std::move(callback);
     high_water_mark_ = high_water_mark;
   }
+  /// 库内部使用：TcpServer 设置，连接关闭时通知它删除连接
   void set_close_callback(CloseCallback callback) { close_callback_ = std::move(callback); }
 
+  /// 连接建立：状态改为 kConnected，Tie，关注读事件，回调用户（上线）。
+  /// 由 TcpServer 在 conn 被 shared_ptr 管理之后调用，只调用一次
   void ConnectEstablished();
 
+  /// 连接销毁的最后一步：从 Poller 中移除 Channel。
+  /// 如果还是 kConnected（如 TcpServer 析构），先改为 kDisconnected 并回调用户（下线）
   void ConnectDestroyed();
 
+  /// 发送数据：能直接写就直接写，写不完的放进输出 Buffer 并关注 EPOLLOUT。
+  /// 不是 kConnected 时丢弃。目前只能在 loop 线程调用
   void Send(std::string_view message);
 
+  /// 半关闭：状态改为 kDisconnecting，输出 Buffer 写空后再 shutdown(SHUT_WR)
   void Shutdown();
 
+  /// 立即关闭，不等输出 Buffer 写完，走 HandleClose
   void ForceClose();
 
 private:
@@ -66,13 +76,19 @@ private:
 
   void set_state(State state) { state_ = state; }
 
+  /// 读到数据回调用户；读到 0 进入 HandleClose；出错进入 HandleError
   void HandleRead(Timestamp receive_time);
+  /// 状态改为 kDisconnected，取消所有事件，回调用户（下线），再通知 TcpServer
   void HandleClose();
+  /// 用 SO_ERROR 取出并清除 socket 错误，只记录日志
   void HandleError();
+  /// 继续写输出 Buffer；写空后取消 EPOLLOUT，回调写完成，kDisconnecting 时半关闭
   void HandleWrite();
 
+  /// 已经在 loop 线程中的发送实现
   void SendInLoop(const char* data, std::size_t len);
 
+  /// 没有在关注写事件（输出 Buffer 已写空）时才 shutdown(SHUT_WR)
   void ShutdownInLoop();
 
 private:

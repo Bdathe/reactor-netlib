@@ -24,7 +24,9 @@ class TcpServer : Noncopyable {
 public:
   using ConnectionMap = std::unordered_map<std::string, TcpConnectionPtr>;
 
+  /// 创建 Acceptor（此时 bind，还没有 listen）
   TcpServer(EventLoop* loop, const InetAddress& listen_addr, std::string name);
+  /// 对连接表中剩下的连接调用 ConnectDestroyed。只能在 loop 线程析构
   ~TcpServer();
 
   EventLoop* loop() const { return loop_; }
@@ -39,10 +41,14 @@ public:
     write_complete_callback_ = std::move(callback);
   }
 
+  /// 开始监听，可以重复调用，只生效一次。只能在 loop 线程调用
+  /// 用户回调要在 Start 之前设置，之后的新连接才能拿到
   void Start();
 
 private:
+  /// Acceptor 的回调：创建 TcpConnection，放进连接表，拷贝用户回调，再 ConnectEstablished
   void NewConnection(int sockfd, const InetAddress& peer_addr);
+  /// 连接的关闭回调：从连接表中删除，再 ConnectDestroyed
   void RemoveConnection(const TcpConnectionPtr& conn);
 
 private:
