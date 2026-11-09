@@ -6,7 +6,9 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -20,6 +22,9 @@ class Poller;
 
 class EventLoop : Noncopyable {
 public:
+  // 投递给 loop 线程执行的任务
+  using Functor = std::function<void()>;
+
   EventLoop();
   ~EventLoop();
 
@@ -44,9 +49,20 @@ public:
   void RemoveChannel(Channel* channel);
   bool HasChannel(Channel* channel) const;
 
+  /// 调用线程是这个 loop 线程时，直接执行 cb；否则交给 QueueInLoop
+  /// 任何线程都可以调用
+  void RunInLoop(Functor cb);
+
+  /// 把 cb 放入队列，由 loop 线程在下一次 DoPendingFunctors 时执行
+  /// 任何线程都可以调用
+  void QueueInLoop(Functor cb);
+
 private:
   void AbortNotInLoopThread() const;
   void AbortChannelNotInLoop() const;
+
+  /// 执行队列里的任务，只在 loop 线程调用
+  void DoPendingFunctors();
 
 private:
   bool looping_;                           // 是否正在 Loop 中
@@ -54,6 +70,8 @@ private:
   const std::thread::id thread_id_;        // 创建这个 loop 的线程
   std::unique_ptr<Poller> poller_;         // IO 多路复用
   std::vector<Channel*> active_channels_;  // 本轮的活跃 Channel
+  std::mutex mutex_;                       // 保护 pending_functors_
+  std::vector<Functor> pending_functors_;  // 任务队列
 };
 
 }  // namespace netlib

@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <thread>
+#include <vector>
 
 #include "netlib/base/noncopyable.h"
 #include "netlib/base/timestamp.h"
@@ -111,6 +112,96 @@ TEST(EventLoopTest, HasChannelTracksRegistration) {
   channel.Remove();
   EXPECT_FALSE(loop.HasChannel(&channel));
   EXPECT_EQ(channel.poller_state(), Channel::PollerState::kNew);
+}
+
+TEST(EventLoopTest, RunInLoopInLoopThreadRunsImmediately) {
+  EventLoop loop;
+
+  bool called = false;
+  loop.RunInLoop([&] { called = true; });
+
+  EXPECT_TRUE(called);  // 在 loop 线程中调用，RunInLoop 返回前已经执行
+}
+
+TEST(EventLoopTest, QueueInLoopDefersUntilLoop) {
+  EventLoop loop;
+
+  bool called = false;
+  loop.QueueInLoop([&] {
+    called = true;
+    loop.Quit();
+  });
+
+  EXPECT_FALSE(called);  // 只是放进队列，还没有执行
+
+  loop.Loop();
+
+  EXPECT_TRUE(called);  // 在 Loop 的 DoPendingFunctors 中执行
+}
+
+TEST(EventLoopTest, RunInLoopFromOtherThreadRunsInLoopThread) {
+  const std::thread::id main_id = std::this_thread::get_id();
+  EventLoop loop;
+
+  std::thread::id ran_in;
+  std::thread t([&] {
+    loop.RunInLoop([&] {
+      ran_in = std::this_thread::get_id();
+      loop.Quit();
+    });
+  });
+
+  loop.Loop();
+  t.join();
+
+  EXPECT_EQ(ran_in, main_id);  // 由线程 t 投递，在 loop 线程中执行
+}
+
+TEST(EventLoopTest, QueueInLoopFromPendingFunctorRunsNextRound) {
+  EventLoop loop;
+
+  bool a_called = false;
+  bool b_called = false;
+  loop.QueueInLoop([&] {
+    a_called = true;
+    // 在 DoPendingFunctors 执行期间投递：如果持锁执行任务，这里会死锁
+    loop.QueueInLoop([&] {
+      b_called = true;
+      loop.Quit();
+    });
+  });
+
+  loop.Loop();
+
+  EXPECT_TRUE(a_called);
+  EXPECT_TRUE(b_called);
+}
+
+TEST(EventLoopTest, ConcurrentQueueInLoopRunsAllTasks) {
+  constexpr int kThreads = 4;
+  constexpr int kTasksPerThread = 1000;
+  EventLoop loop;
+
+  int count = 0;  // 不加锁：只在 loop 线程中访问，TSan 不应报告
+  std::vector<std::thread> producers;
+  for (int i = 0; i < kThreads; ++i) {
+    producers.emplace_back([&] {
+      for (int j = 0; j < kTasksPerThread; ++j) {
+        loop.QueueInLoop([&] {
+          if (++count == kThreads * kTasksPerThread) {
+            loop.Quit();
+          }
+        });
+      }
+    });
+  }
+
+  loop.Loop();
+  for (std::thread& t : producers) {
+    t.join();
+  }
+
+  EXPECT_EQ(count, kThreads * kTasksPerThread);
 }
 
 TEST(EventLoopDeathTest, SecondLoopInSameThreadAborts) {

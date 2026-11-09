@@ -72,6 +72,8 @@ void EventLoop::Loop() {
     for (Channel* channel : active_channels_) {
       channel->HandleEvent(receive_time);
     }
+
+    DoPendingFunctors();
   }
 
   looping_ = false;
@@ -102,6 +104,36 @@ bool EventLoop::HasChannel(Channel* channel) const {
   }
 
   return poller_->HasChannel(channel);
+}
+
+void EventLoop::RunInLoop(Functor cb) {
+  if (IsInLoopThread()) {
+    cb();
+  } else {
+    QueueInLoop(std::move(cb));
+  }
+}
+
+void EventLoop::QueueInLoop(Functor cb) {
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    pending_functors_.push_back(std::move(cb));
+  }
+
+  // TODO: wakeup
+}
+
+void EventLoop::DoPendingFunctors() {
+  std::vector<Functor> functors;
+
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    functors.swap(pending_functors_);
+  }
+
+  for (const Functor& functor : functors) {
+    functor();
+  }
 }
 
 void EventLoop::AbortNotInLoopThread() const {
