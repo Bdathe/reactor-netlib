@@ -42,7 +42,15 @@ public:
   void Loop();
 
   /// 请求退出，当前这一轮处理完后 Loop 返回
-  void Quit() { quit_ = true; }
+  /// 任何线程都可以调用
+  void Quit() {
+    quit_ = true;
+
+    // 别的线程调用时，loop 线程可能正阻塞在 epoll_wait，要唤醒它才能尽快看到 quit_
+    if (!IsInLoopThread()) {
+      Wakeup();
+    }
+  }
 
   /// 转发给 Poller，只能在 loop 线程调用，channel 必须属于这个 loop
   void UpdateChannel(Channel* channel);
@@ -57,6 +65,10 @@ public:
   /// 任何线程都可以调用
   void QueueInLoop(Functor cb);
 
+  /// 往 wakeup_fd_ 写入 1，让 loop 线程从 epoll_wait 返回
+  /// 任何线程都可以调用
+  void Wakeup();
+
 private:
   void AbortNotInLoopThread() const;
   void AbortChannelNotInLoop() const;
@@ -64,14 +76,20 @@ private:
   /// 执行队列里的任务，只在 loop 线程调用
   void DoPendingFunctors();
 
+  /// 读回调，负责处理唤醒事件写入的数据
+  void HandleWakeupRead();
+
 private:
-  bool looping_;                           // 是否正在 Loop 中
-  std::atomic<bool> quit_;                 // 退出标志，可能由其他线程设置
-  const std::thread::id thread_id_;        // 创建这个 loop 的线程
-  std::unique_ptr<Poller> poller_;         // IO 多路复用
-  std::vector<Channel*> active_channels_;  // 本轮的活跃 Channel
-  std::mutex mutex_;                       // 保护 pending_functors_
-  std::vector<Functor> pending_functors_;  // 任务队列
+  bool looping_;                             // 是否正在 Loop 中
+  std::atomic<bool> quit_;                   // 退出标志，可能由其他线程设置
+  const std::thread::id thread_id_;          // 创建这个 loop 的线程
+  std::unique_ptr<Poller> poller_;           // IO 多路复用
+  std::vector<Channel*> active_channels_;    // 本轮的活跃 Channel
+  std::mutex mutex_;                         // 保护 pending_functors_
+  std::vector<Functor> pending_functors_;    // 任务队列
+  int wakeup_fd_;                            // 用于唤醒的 fd
+  std::unique_ptr<Channel> wakeup_channel_;  // 用于唤醒的 Channel
+  bool calling_pending_functors_;            // 正在执行 DoPendingFunctors，只在 loop 线程读写
 };
 
 }  // namespace netlib

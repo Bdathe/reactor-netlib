@@ -4,6 +4,7 @@
 #include <sys/eventfd.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <cstdint>
 #include <thread>
 #include <vector>
@@ -202,6 +203,21 @@ TEST(EventLoopTest, ConcurrentQueueInLoopRunsAllTasks) {
   }
 
   EXPECT_EQ(count, kThreads * kTasksPerThread);
+}
+
+TEST(EventLoopTest, QuitFromOtherThreadWakesLoop) {
+  EventLoop loop;
+
+  std::thread t;
+  // 这个任务在 Loop 的 DoPendingFunctors 中执行，保证 t 调用 Quit 时 loop 已经在运行
+  loop.QueueInLoop([&] { t = std::thread([&] { loop.Quit(); }); });
+
+  auto start = std::chrono::steady_clock::now();
+  loop.Loop();  // 任务执行完后进入 Poll 阻塞，只有 Quit 的唤醒能让它及时返回
+  auto elapsed = std::chrono::steady_clock::now() - start;
+  t.join();
+
+  EXPECT_LT(elapsed, std::chrono::seconds(1));  // 不唤醒要等 kPollTimeMs（10s）
 }
 
 TEST(EventLoopDeathTest, SecondLoopInSameThreadAborts) {

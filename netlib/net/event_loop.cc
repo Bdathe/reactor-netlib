@@ -6,6 +6,7 @@
 #include "netlib/net/event_loop.h"
 
 #include <signal.h>
+#include <sys/eventfd.h>
 
 #include <memory>
 #include <thread>
@@ -42,16 +43,33 @@ EventLoop::EventLoop()
     : looping_(false),
       quit_(false),
       thread_id_(std::this_thread::get_id()),
-      poller_(std::make_unique<Poller>(this)) {
+      poller_(std::make_unique<Poller>(this)),
+      wakeup_fd_(::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC)),
+      wakeup_channel_(std::make_unique<Channel>(this, wakeup_fd_)),
+      calling_pending_functors_(false) {
   if (t_loop_in_this_thread) {
     LOG_FATAL << "cannot create a second EventLoop in this thread";
   }
 
+  if (wakeup_fd_ == -1) {
+    LOG_SYSFATAL << "eventfd failed";
+  }
+
   t_loop_in_this_thread = this;
+
+  wakeup_channel_->set_read_callback([this](Timestamp /*receive_time*/) { HandleWakeupRead(); });
+  wakeup_channel_->EnableReading();
 }
 
 EventLoop::~EventLoop() {
   t_loop_in_this_thread = nullptr;
+
+  wakeup_channel_->DisableAll();
+  wakeup_channel_->Remove();
+
+  if (::close(wakeup_fd_) == -1) {
+    LOG_SYSERR << "close failed, wakeup_fd=" << wakeup_fd_;
+  }
 }
 
 void EventLoop::Loop() {
@@ -120,10 +138,39 @@ void EventLoop::QueueInLoop(Functor cb) {
     pending_functors_.push_back(std::move(cb));
   }
 
-  // TODO: wakeup
+  // 下一步会先进入 Poll 的情况都要唤醒：
+  // 1. 别的线程投递：loop 线程可能正阻塞在 epoll_wait
+  // 2. 还没进入 Loop（或已退出）：进入 Loop 后第一步就是 Poll
+  // 3. 在 DoPendingFunctors 中投递：这一轮已经 swap 过，新任务要等下一轮
+  // 在 HandleEvent 回调中投递不用唤醒：回调返回后紧接着就是 DoPendingFunctors
+  // IsInLoopThread() 必须放在最前面：looping_ 和 calling_pending_functors_ 不是 atomic，
+  // 靠短路求值保证只有 loop 线程会读它们
+  if (!IsInLoopThread() || !looping_ || calling_pending_functors_) {
+    Wakeup();
+  }
+}
+
+void EventLoop::Wakeup() {
+  uint64_t one = 1;
+  ssize_t n = ::write(wakeup_fd_, &one, sizeof(one));
+
+  if (n != sizeof(one)) {
+    LOG_SYSERR << "write failed, wakeup_fd=" << wakeup_fd_;
+  }
+}
+
+void EventLoop::HandleWakeupRead() {
+  uint64_t count{};
+  ssize_t n = ::read(wakeup_fd_, &count, sizeof(count));
+
+  if (n != sizeof(count)) {
+    LOG_SYSERR << "read failed, wakeup_fd=" << wakeup_fd_;
+  }
 }
 
 void EventLoop::DoPendingFunctors() {
+  calling_pending_functors_ = true;
+
   std::vector<Functor> functors;
 
   {
@@ -134,6 +181,8 @@ void EventLoop::DoPendingFunctors() {
   for (const Functor& functor : functors) {
     functor();
   }
+
+  calling_pending_functors_ = false;
 }
 
 void EventLoop::AbortNotInLoopThread() const {
