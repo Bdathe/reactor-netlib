@@ -39,6 +39,7 @@ public:
   }
 
   /// 事件循环：Poll → 逐个 HandleEvent，直到 Quit。只能在 loop 线程调用，不可重入
+  /// 在 Loop() 之前调用 Quit() 也有效，Loop() 会立即返回
   void Loop();
 
   /// 请求退出，当前这一轮处理完后 Loop 返回

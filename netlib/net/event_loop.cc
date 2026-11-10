@@ -80,7 +80,6 @@ void EventLoop::Loop() {
   }
 
   looping_ = true;
-  quit_ = false;
 
   while (!quit_) {
     // 清理掉上一轮的活跃 channels
