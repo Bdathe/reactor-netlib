@@ -11,8 +11,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include "netlib/base/noncopyable.h"
@@ -106,6 +108,18 @@ protected:
   // 127.0.0.1:port 的监听地址
   static InetAddress LoopbackAddr(uint16_t port) {
     return *InetAddress::FromIpPort("127.0.0.1", port);
+  }
+
+  // 多线程模式下，下线回调之后还要经过 RemoveConnectionInLoop（base loop）和
+  // ConnectDestroyed（IO 线程）两跳，连接对象才会释放；在下线回调里直接 Quit 太早。
+  // 这个函数在 base loop 中反复检查（每次重新投递自己），直到 weak_conn 过期才 Quit。
+  // 只能在 base loop 线程调用，或通过 loop->QueueInLoop 投递过去
+  static void QuitWhenExpired(EventLoop* loop, const std::weak_ptr<TcpConnection>& weak_conn) {
+    if (weak_conn.expired()) {
+      loop->Quit();
+    } else {
+      loop->QueueInLoop([loop, weak_conn] { QuitWhenExpired(loop, weak_conn); });
+    }
   }
 };
 
@@ -350,6 +364,139 @@ TEST_F(TcpServerTest, ForceCloseInConnectionCallback) {
   EXPECT_FALSE(connected);
   EXPECT_TRUE(weak_conn.expired());
   EXPECT_EQ(client.ReadSome(&reply), 0);
+}
+
+TEST_F(TcpServerTest, ConnectionsDistributedAcrossIoThreads) {
+  EventLoop loop;
+  uint16_t port = PickFreePort();
+  const std::thread::id main_id = std::this_thread::get_id();
+
+  // 两个连接的上线回调在两个 IO 线程里并发执行，记录的变量要加锁
+  std::mutex mutex;
+  std::vector<std::thread::id> up_ids;
+
+  TcpServer server(&loop, LoopbackAddr(port), "test-server");
+  server.SetThreadNum(2);
+
+  server.set_connection_callback([&](const TcpConnectionPtr& c) {
+    if (c->connected()) {
+      {
+        std::lock_guard<std::mutex> lock(mutex);
+        up_ids.push_back(std::this_thread::get_id());
+
+        if (up_ids.size() == 2) {
+          loop.Quit();
+        }
+      }
+    }
+  });
+
+  server.Start();
+  
+  Client client1(port);
+
+  loop.Loop();
+
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    ASSERT_EQ(up_ids.size(), 2);
+    EXPECT_NE(up_ids[0], main_id);
+    EXPECT_NE(up_ids[1], main_id);
+    EXPECT_NE(up_ids[0], up_ids[1]);
+  }
+}
+
+TEST_F(TcpServerTest, PeerCloseInIoThreadRemovesConnection) {
+  EventLoop loop;
+  uint16_t port = PickFreePort();
+  const std::thread::id main_id = std::this_thread::get_id();
+
+  // 只有一个连接，上线、下线回调都在同一个 IO 线程里先后执行，不会并发写；
+  // 主线程在 Loop 返回后才读，同步由 Quit（atomic）和任务队列的锁保证
+  int connection_count = 0;
+  std::thread::id up_id;
+  std::thread::id down_id;
+  std::weak_ptr<TcpConnection> weak_conn;
+
+  TcpServer server(&loop, LoopbackAddr(port), "test-server");
+  server.SetThreadNum(2);
+
+  server.set_connection_callback([&](const TcpConnectionPtr& c) {
+    ++connection_count;
+
+    if (c->connected()) {
+      up_id = std::this_thread::get_id();
+      weak_conn = c;
+    } else {
+      down_id = std::this_thread::get_id();
+      loop.QueueInLoop([&] { QuitWhenExpired(&loop, weak_conn); });
+    }
+  });
+
+  server.Start();
+  Client client(port);
+  client.Close();
+  loop.Loop();
+
+  EXPECT_EQ(connection_count, 2);
+  EXPECT_NE(up_id, main_id);
+  EXPECT_EQ(up_id, down_id);
+  EXPECT_TRUE(weak_conn.expired());
+}
+
+TEST_F(TcpServerTest, DestructorDestroysLiveConnectionsInIoThreads) {
+  EventLoop loop;
+  uint16_t port = PickFreePort();
+  const std::thread::id main_id = std::this_thread::get_id();
+
+  // 两个 IO 线程并发执行回调，记录的变量要加锁
+  std::mutex mutex;
+  int up_count = 0;
+  int down_count = 0;
+  std::vector<std::thread::id> up_ids;
+  std::vector<std::thread::id> down_ids;
+  std::vector<std::weak_ptr<TcpConnection>> weak_conns;
+
+  auto server = std::make_unique<TcpServer>(&loop, LoopbackAddr(port), "test-server");
+  server->SetThreadNum(2);
+  server->set_connection_callback([&](const TcpConnectionPtr& c) {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (c->connected()) {
+      ++up_count;
+      up_ids.push_back(std::this_thread::get_id());
+      weak_conns.push_back(c);
+      if (up_count == 2) {
+        loop.Quit();
+      }
+    } else {
+      ++down_count;
+      down_ids.push_back(std::this_thread::get_id());
+    }
+  });
+  server->Start();
+
+  Client client1(port);
+  Client client2(port);
+  loop.Loop();
+
+  // 两个连接都还活着时析构：~TcpServer 把 ConnectDestroyed 投递到各自的 IO loop，
+  // 之后线程池析构 Quit + join；Loop 退出前补执行一次 DoPendingFunctors，任务不会丢
+  server.reset();
+
+  // join 之后 IO 线程已经结束，读取记录不会和回调并发
+  std::lock_guard<std::mutex> lock(mutex);
+  EXPECT_EQ(up_count, 2);
+  EXPECT_EQ(down_count, 2);  // 每个连接的下线回调执行且只执行一次
+  for (const std::thread::id& id : down_ids) {
+    EXPECT_NE(id, main_id);  // 在 IO 线程里执行，而不是析构 TcpServer 的主线程
+  }
+  for (const auto& weak_conn : weak_conns) {
+    EXPECT_TRUE(weak_conn.expired());
+  }
+
+  std::string reply;
+  EXPECT_EQ(client1.ReadSome(&reply), 0);  // 服务器关闭了连接，客户端读到 EOF
+  EXPECT_EQ(client2.ReadSome(&reply), 0);
 }
 
 TEST_F(TcpServerTest, IgnoresSigPipe) {
