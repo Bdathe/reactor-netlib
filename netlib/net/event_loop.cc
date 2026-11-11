@@ -93,6 +93,10 @@ void EventLoop::Loop() {
     DoPendingFunctors();
   }
 
+  // 退出前再执行一次：别的线程可能在 DoPendingFunctors 执行期间投递任务、紧接着 Quit，
+  // 这时 while 看到 quit_ 就退出了，任务还留在队列里；
+  // 保证 Quit 之前投递的任务都会执行；Quit 之后投递的不保证
+  DoPendingFunctors();
   looping_ = false;
 }
 
