@@ -394,6 +394,7 @@ TEST_F(TcpServerTest, ConnectionsDistributedAcrossIoThreads) {
   server.Start();
   
   Client client1(port);
+  Client client2(port);
 
   loop.Loop();
 

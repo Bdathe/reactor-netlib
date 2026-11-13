@@ -72,12 +72,23 @@ void TcpConnection::ConnectDestroyed() {
 }
 
 void TcpConnection::Send(std::string_view message) {
-  loop_->AssertInLoopThread();
+  if (loop_->IsInLoopThread()) {
+    SendInLoop(message.data(), message.size());
+  } else {
+    loop_->RunInLoop([self = shared_from_this(), data = std::string(message)] {
+      self->SendInLoop(data.data(), data.size());
+    });
+  }
+}
 
-  if (state_ != State::kConnected)
-    return;
-
-  SendInLoop(message.data(), message.size());
+void TcpConnection::Send(std::string&& message) {
+  if (loop_->IsInLoopThread()) {
+    SendInLoop(message.data(), message.size());
+  } else {
+    loop_->RunInLoop([self = shared_from_this(), data = std::move(message)] {
+      self->SendInLoop(data.data(), data.size());
+    });
+  }
 }
 
 void TcpConnection::Shutdown() {
@@ -184,6 +195,10 @@ void TcpConnection::SendInLoop(const char* data, std::size_t len) {
 
   if (state_ == State::kDisconnected) {
     LOG_WARN << "[" << name_ << "] already disconnected, give up sending, len=" << len;
+    return;
+  }
+
+  if (state_ != State::kConnected) {
     return;
   }
 

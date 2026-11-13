@@ -61,9 +61,13 @@ public:
   /// 如果还是 kConnected（如 TcpServer 析构），先改为 kDisconnected 并回调用户（下线）
   void ConnectDestroyed();
 
-  /// 发送数据：能直接写就直接写，写不完的放进输出 Buffer 并关注 EPOLLOUT。
-  /// 不是 kConnected 时丢弃。目前只能在 loop 线程调用
+  /// 发送数据。任意线程都可以调用：已在所属 loop 线程则直接写，否则把数据投递给该 loop
+  /// 写不完的放进输出 Buffer 并关注 EPOLLOUT。不是 kConnected 时在 SendInLoop 里丢弃，Send 自己不读 state_
+  /// string_view 不拥有数据，跨线程时会拷贝；string&& 把字符串移进任务，不再拷贝内容
   void Send(std::string_view message);
+  void Send(std::string&& message);
+  /// 字面量对上面两个重载都要做用户定义转换，无法选择。这个重载是精确匹配，转交给 string_view 版本
+  void Send(const char* message) { Send(static_cast<std::string_view>(message)); }
 
   /// 半关闭：状态改为 kDisconnecting，输出 Buffer 写空后再 shutdown(SHUT_WR)
   void Shutdown();

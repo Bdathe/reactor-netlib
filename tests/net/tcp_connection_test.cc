@@ -394,4 +394,64 @@ TEST(TcpConnectionTest, ForceCloseDiscardsPendingData) {
   EXPECT_TRUE(big.compare(0, received.size(), received) == 0);
 }
 
+TEST(TcpConnectionTest, SendFromOtherThreadDeliversData) {
+  // 准备
+  EventLoop loop;
+  TcpPair pair;
+
+  // 创建连接
+  TcpConnectionPtr conn = MakeConnection(&loop, pair);
+
+  // 设置回调
+  conn->set_write_complete_callback([&](const TcpConnectionPtr&) {
+    loop.Quit();
+  });
+
+  conn->ConnectEstablished();
+
+  std::thread t([&conn] {
+    std::string s = "from-other";
+    conn->Send(s);
+  });
+
+  t.join();
+
+  loop.Loop();
+
+  EXPECT_EQ(ReadExactly(pair.client_fd(), 10), "from-other");
+
+  conn->ConnectDestroyed();
+}
+
+TEST(TcpConnectionTest, SendFromOtherThreadMovesString) {
+  // 准备
+  EventLoop loop;
+  TcpPair pair;
+
+  // 创建连接
+  TcpConnectionPtr conn = MakeConnection(&loop, pair);
+
+  // 设置回调
+  conn->set_write_complete_callback([&](const TcpConnectionPtr&) {
+    loop.Quit();
+  });
+
+  conn->ConnectEstablished();
+
+  std::string s = "from-other";
+  std::thread t([&] {
+    conn->Send(std::move(s));
+  });
+
+  t.join();
+
+  EXPECT_TRUE(s.empty());
+
+  loop.Loop();
+
+  EXPECT_EQ(ReadExactly(pair.client_fd(), 10), "from-other");
+
+  conn->ConnectDestroyed();
+}
+
 }  // namespace netlib
