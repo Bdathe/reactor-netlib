@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <condition_variable>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -506,6 +507,58 @@ TEST_F(TcpServerTest, IgnoresSigPipe) {
 
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(old_action.sa_handler, SIG_IGN);
+}
+
+TEST_F(TcpServerTest, SendWhilePeerClosesDoesNotCrash) {
+  // 测试线程就是 base loop。SetThreadNum(1) 让连接落在另一个 IO 线程，关闭才会跨两个 loop。
+  EventLoop loop;
+  uint16_t port = PickFreePort();
+
+  std::mutex mutex;
+  std::condition_variable conn_ready;
+  TcpConnectionPtr conn_for_sender;
+  std::weak_ptr<TcpConnection> weak_conn;
+
+  TcpServer server(&loop, LoopbackAddr(port), "test-server");
+  server.SetThreadNum(1);
+  server.set_connection_callback([&](const TcpConnectionPtr& c) {
+    // 这个回调在 IO 线程，不在测试线程
+    if (c->connected()) {
+      std::lock_guard<std::mutex> lock(mutex);
+      conn_for_sender = c;
+      weak_conn = c;
+      conn_ready.notify_one();
+    } else {
+      // 下线之后还有删表和 ConnectDestroyed，不能在这里直接 Quit
+      loop.QueueInLoop([&] { QuitWhenExpired(&loop, weak_conn); });
+    }
+  });
+  server.Start();
+  Client client(port);
+
+  std::thread sender([&] {
+    TcpConnectionPtr conn;
+    {
+      std::unique_lock<std::mutex> lock(mutex);
+      conn_ready.wait(lock, [&] { return static_cast<bool>(conn_for_sender); });
+      // 把所有权拿走。留在 conn_for_sender 里的话，测试线程会一直握着，weak_ptr 永远不过期
+      conn = std::move(conn_for_sender);
+    }
+    // 关闭后再发几十次就够覆盖竞态。发太多次会每次打一条 LOG_WARN，
+    // TSan 下可能超过夹具里的 alarm(10)，QuitWhenExpired 还没看到过期就被杀掉
+    for (int i = 0; i < 80; ++i) {
+      conn->Send("x");
+      if (i == 20) {
+        client.Close();
+      }
+    }
+    conn.reset();
+  });
+
+  loop.Loop();
+  sender.join();
+
+  EXPECT_TRUE(weak_conn.expired());
 }
 
 }  // namespace netlib

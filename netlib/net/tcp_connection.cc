@@ -92,19 +92,32 @@ void TcpConnection::Send(std::string&& message) {
 }
 
 void TcpConnection::Shutdown() {
-  loop_->AssertInLoopThread();
-
-  if (state_ == State::kConnected) {
-    set_state(State::kDisconnecting);
-    ShutdownInLoop();
+  if (loop_->IsInLoopThread()) {
+    if (state_ == State::kConnected) {
+      set_state(State::kDisconnecting);
+      ShutdownInLoop();
+    }
+  } else {
+    loop_->RunInLoop([conn = shared_from_this()] {
+      if (conn->state_ == State::kConnected) {
+        conn->set_state(State::kDisconnecting);
+        conn->ShutdownInLoop();
+      }
+    });
   }
 }
 
 void TcpConnection::ForceClose() {
-  loop_->AssertInLoopThread();
-
-  if (state_ == State::kConnected || state_ == State::kDisconnecting) {
-    HandleClose();
+  if (loop_->IsInLoopThread()) {
+    if (state_ == State::kConnected || state_ == State::kDisconnecting) {
+      HandleClose();
+    }
+  } else {
+    loop_->RunInLoop([conn = shared_from_this()] {
+      if (conn->state_ == State::kConnected || conn->state_ == State::kDisconnecting) {
+        conn->HandleClose();
+      }
+    });
   }
 }
 

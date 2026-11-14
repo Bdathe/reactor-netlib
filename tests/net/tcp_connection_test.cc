@@ -403,9 +403,7 @@ TEST(TcpConnectionTest, SendFromOtherThreadDeliversData) {
   TcpConnectionPtr conn = MakeConnection(&loop, pair);
 
   // 设置回调
-  conn->set_write_complete_callback([&](const TcpConnectionPtr&) {
-    loop.Quit();
-  });
+  conn->set_write_complete_callback([&](const TcpConnectionPtr&) { loop.Quit(); });
 
   conn->ConnectEstablished();
 
@@ -432,16 +430,12 @@ TEST(TcpConnectionTest, SendFromOtherThreadMovesString) {
   TcpConnectionPtr conn = MakeConnection(&loop, pair);
 
   // 设置回调
-  conn->set_write_complete_callback([&](const TcpConnectionPtr&) {
-    loop.Quit();
-  });
+  conn->set_write_complete_callback([&](const TcpConnectionPtr&) { loop.Quit(); });
 
   conn->ConnectEstablished();
 
   std::string s = "from-other";
-  std::thread t([&] {
-    conn->Send(std::move(s));
-  });
+  std::thread t([&] { conn->Send(std::move(s)); });
 
   t.join();
 
@@ -452,6 +446,89 @@ TEST(TcpConnectionTest, SendFromOtherThreadMovesString) {
   EXPECT_EQ(ReadExactly(pair.client_fd(), 10), "from-other");
 
   conn->ConnectDestroyed();
+}
+
+TEST(TcpConnectionTest, ShutdownFromOtherThreadSendsFinAfterData) {
+  // 准备
+  EventLoop loop;
+  TcpPair pair;
+
+  // 创建连接
+  TcpConnectionPtr conn = MakeConnection(&loop, pair);
+
+  // 写完成就 Quit 太早：数据在 Send 里已经写完，Shutdown 的 FIN 还没发出去。
+  // 等对端读完并关掉，服务器 read 返回 0 进入 HandleClose，关闭回调里再 Quit。
+  conn->set_close_callback([&](const TcpConnectionPtr&) { loop.Quit(); });
+
+  conn->ConnectEstablished();
+  const std::string payload = "Hello World!";
+  conn->Send(payload);
+
+  ssize_t eof_result = -1;
+  char c = '\0';
+  std::string received;
+  std::thread reader([&] {
+    received = ReadUntilEof(pair.client_fd());
+    eof_result = ::read(pair.client_fd(), &c, 1);
+    pair.CloseClient();
+  });
+
+  std::thread sender([&] { conn->Shutdown(); });
+  sender.join();
+
+  loop.Loop();
+  reader.join();
+
+  // 断言
+  EXPECT_EQ(eof_result, 0);
+  EXPECT_EQ(received, payload);
+
+  // 清理
+  conn->ConnectDestroyed();
+}
+
+TEST(TcpConnectionTest, ForceCloseFromOtherThreadReachesEof) {
+  // 准备
+  EventLoop loop;
+  TcpPair pair;
+
+  // 创建连接
+  TcpConnectionPtr conn = MakeConnection(&loop, pair);
+
+  conn->set_close_callback([&](const TcpConnectionPtr&) { loop.Quit(); });
+
+  // 建立连接
+  conn->ConnectEstablished();
+
+  // 发送 4MB 数据，但是内核接受区只有 64KB
+  // 其余的放在 Output Buffer
+  std::string big = MakePattern(4 * 1024 * 1024);
+  conn->Send(big);
+
+  std::thread sender([&] { conn->ForceClose(); });
+  sender.join();
+
+  loop.Loop();
+
+  // 清理
+  conn->ConnectDestroyed();
+  conn.reset();
+
+  ssize_t eof_result = -1;
+  char c = '\0';
+  std::string received;
+  std::thread reader([&] {
+    received = ReadUntilEof(pair.client_fd());
+    eof_result = ::read(pair.client_fd(), &c, 1);
+    pair.CloseClient();
+  });
+
+  reader.join();
+
+  // 断言
+  EXPECT_EQ(eof_result, 0);
+  EXPECT_LT(received.size(), big.size());
+  EXPECT_TRUE(big.compare(0, received.size(), received) == 0);
 }
 
 }  // namespace netlib
