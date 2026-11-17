@@ -1,6 +1,7 @@
 #include "netlib/base/thread_pool.h"
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <atomic>
 #include <chrono>
@@ -8,8 +9,6 @@
 #include <memory>
 #include <mutex>
 #include <thread>
-
-#include <unistd.h>
 
 namespace netlib {
 
@@ -106,8 +105,11 @@ TEST(ThreadPoolTest, RunDropsTaskOnceShutdownStarts) {
   pool->Run([&] { ++cnt; });
 
   // C 堵在满队列上。先析构池，这次 Run 看到 running_ == false 就丢掉任务
-  std::thread t([&] {
-    pool->Run([&] { ++cnt; });
+  // 注意：子线程不能通过 unique_ptr 引用调 pool->Run，否则和主线程 pool.reset()
+  // 修改指针构成数据竞争
+  ThreadPool* raw_pool = pool.get();
+  std::thread t([&, raw_pool] {
+    raw_pool->Run([&] { ++cnt; });
     run_returned = true;
   });
 
