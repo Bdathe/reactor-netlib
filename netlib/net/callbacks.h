@@ -29,5 +29,7 @@ using WriteCompleteCallback = std::function<void(const TcpConnectionPtr&)>;
 using HighWaterMarkCallback = std::function<void(const TcpConnectionPtr&, std::size_t)>;
 // 库内部使用：通知 TcpServer 把连接从连接表中删除
 using CloseCallback = std::function<void(const TcpConnectionPtr&)>;
+// 定时器回调
+using TimerCallback = std::function<void()>;
 
 }  // namespace netlib

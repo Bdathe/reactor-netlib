@@ -10,11 +10,13 @@
 
 #include <memory>
 #include <thread>
+#include <utility>
 
 #include "netlib/base/logging.h"
 #include "netlib/base/timestamp.h"
 #include "netlib/net/channel.h"
 #include "netlib/net/poller.h"
+#include "netlib/net/timer_queue.h"
 
 namespace netlib {
 
@@ -46,7 +48,8 @@ EventLoop::EventLoop()
       poller_(std::make_unique<Poller>(this)),
       wakeup_fd_(::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC)),
       wakeup_channel_(std::make_unique<Channel>(this, wakeup_fd_)),
-      calling_pending_functors_(false) {
+      calling_pending_functors_(false),
+      timer_queue_(std::make_unique<TimerQueue>(this)) {
   if (t_loop_in_this_thread) {
     LOG_FATAL << "cannot create a second EventLoop in this thread";
   }
@@ -160,6 +163,22 @@ void EventLoop::Wakeup() {
   if (n != sizeof(one)) {
     LOG_SYSERR << "write failed, wakeup_fd=" << wakeup_fd_;
   }
+}
+
+TimerId EventLoop::RunAt(TimePoint time, TimerCallback cb) {
+  return timer_queue_->AddTimer(std::move(cb), time, Duration::zero());
+}
+
+TimerId EventLoop::RunAfter(Duration delay, TimerCallback cb) {
+  return timer_queue_->AddTimer(std::move(cb), Clock::now() + delay, Duration::zero());
+}
+
+TimerId EventLoop::RunEvery(Duration interval, TimerCallback cb) {
+  return timer_queue_->AddTimer(std::move(cb), Clock::now() + interval, interval);
+}
+
+void EventLoop::Cancel(TimerId timer_id) {
+  timer_queue_->Cancel(timer_id);
 }
 
 void EventLoop::HandleWakeupRead() {

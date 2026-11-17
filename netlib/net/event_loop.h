@@ -6,6 +6,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -13,17 +14,24 @@
 #include <vector>
 
 #include "netlib/base/noncopyable.h"
+#include "netlib/net/callbacks.h"
+#include "netlib/net/timer_id.h"
 
 namespace netlib {
 
 // 前置声明
 class Channel;
 class Poller;
+class TimerQueue;
 
 class EventLoop : Noncopyable {
 public:
   // 投递给 loop 线程执行的任务
   using Functor = std::function<void()>;
+
+  using Clock = std::chrono::steady_clock;
+  using TimePoint = Clock::time_point;
+  using Duration = Clock::duration;
 
   EventLoop();
   ~EventLoop();
@@ -70,6 +78,20 @@ public:
   /// 任何线程都可以调用
   void Wakeup();
 
+  /// 在 time 时调用任务
+  /// 任何线程都可以调用
+  TimerId RunAt(TimePoint time, TimerCallback cb);
+  /// 在 delay 之后调用任务
+  /// 任何线程都可以调用
+  TimerId RunAfter(Duration delay, TimerCallback cb);
+  /// 每隔 interval 调用任务
+  /// 任何线程都可以调用
+  TimerId RunEvery(Duration interval, TimerCallback cb);
+
+  /// 取消定时任务 timer_id
+  /// 任何线程都可以调用
+  void Cancel(TimerId timer_id);
+
 private:
   void AbortNotInLoopThread() const;
   void AbortChannelNotInLoop() const;
@@ -91,6 +113,7 @@ private:
   int wakeup_fd_;                            // 用于唤醒的 fd
   std::unique_ptr<Channel> wakeup_channel_;  // 用于唤醒的 Channel
   bool calling_pending_functors_;            // 正在执行 DoPendingFunctors，只在 loop 线程读写
+  std::unique_ptr<TimerQueue> timer_queue_;  // 定时任务队列
 };
 
 }  // namespace netlib
