@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <any>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -52,6 +53,11 @@ public:
   }
   /// 库内部使用：TcpServer 设置，连接关闭时通知它删除连接
   void set_close_callback(CloseCallback callback) { close_callback_ = std::move(callback); }
+  /// 绑定上层自定义上下文，只能在连接所属的loop 线程读写
+  void set_context(std::any context) { context_ = std::move(context); }
+
+  const std::any& context() const { return context_; }
+  std::any* mutable_context() { return &context_; }
 
   /// 连接建立：状态改为 kConnected，Tie，关注读事件，回调用户（上线）。
   /// 由 TcpServer 在 conn 被 shared_ptr 管理之后调用，只调用一次
@@ -113,6 +119,7 @@ private:
   WriteCompleteCallback write_complete_callback_;   // 写完成的回调
   HighWaterMarkCallback high_water_mark_callback_;  // 高水位的回调
   CloseCallback close_callback_;                    // 通知 TcpServer 删除连接
+  std::any context_;  // 上层绑定的每连接上下文（如时间轮 Entry、HttpContext）
 };
 
 }  // namespace netlib
