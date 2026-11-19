@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include <cstddef>
+#include <functional>
 #include <sstream>
 
 #include "netlib/base/noncopyable.h"
@@ -19,10 +21,16 @@ enum class LogLevel { kTrace, kDebug, kInfo, kWarn, kError, kFatal };
 
 class Logger : Noncopyable {
 public:
+  using LogOutputFunc = std::function<void(const char* data, std::size_t len)>;
+  using LogFlushFunc = std::function<void()>;
+
   /// with_errno 为 true 时，在行尾追加 errno 和对应的错误描述
   Logger(const char* file, int line, LogLevel level, bool with_errno = false);
   /// 输出整行日志；级别为 kFatal 时随后 abort
   ~Logger();
+
+  static void SetLogOutput(LogOutputFunc func);
+  static void SetLogFlush(LogFlushFunc func);
 
   std::ostream& stream() { return stream_; }
 

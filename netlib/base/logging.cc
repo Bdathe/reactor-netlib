@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <utility>
 
 #include "netlib/base/timestamp.h"
 
@@ -20,6 +21,17 @@ namespace {
 const char* kLevelNames[] = {"TRACE", "DEBUG", "INFO ", "WARN ", "ERROR", "FATAL"};
 
 LogLevel min_log_level = LogLevel::kInfo;
+
+void DefaultOutput(const char* data, std::size_t len) {
+  std::fwrite(data, 1, len, stderr);
+}
+
+void DefaultFlush() {
+  std::fflush(stderr);
+}
+
+Logger::LogOutputFunc g_output = DefaultOutput;
+Logger::LogFlushFunc g_flush = DefaultFlush;
 }  // namespace
 
 Logger::Logger(const char* file, int line, LogLevel level, bool with_errno)
@@ -39,9 +51,10 @@ Logger::~Logger() {
   stream_ << " - " << file_ << ":" << line_ << "\n";
 
   std::string str = stream_.str();
-  fwrite(str.data(), 1, str.size(), stderr);
+  g_output(str.data(), str.size());
 
   if (level_ == LogLevel::kFatal) {
+    g_flush();
     std::abort();
   }
 }
@@ -52,6 +65,22 @@ LogLevel MinLogLevel() {
 
 void SetMinLogLevel(LogLevel level) {
   min_log_level = level;
+}
+
+void Logger::SetLogOutput(LogOutputFunc func) {
+  if (func) {
+    g_output = std::move(func);
+  } else {
+    g_output = DefaultOutput;
+  }
+}
+
+void Logger::SetLogFlush(LogFlushFunc func) {
+  if (func) {
+    g_flush = std::move(func);
+  } else {
+    g_flush = DefaultFlush;
+  }
 }
 
 }  // namespace netlib
