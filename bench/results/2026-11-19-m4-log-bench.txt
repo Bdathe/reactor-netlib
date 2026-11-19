@@ -1,0 +1,143 @@
+=== Environment ===
+2026-11-19T14:13:19+08:00
+git commit: ed9d345
+kernel: Linux 7.3.4-1-cachyos x86_64
+compiler: g++ (GCC) 16.2.1 20260810
+cpu: AMD Ryzen 7 5800H with Radeon Graphics (16 logical cores)
+mem: 14Gi
+fs: /dev/nvme1n1p2 btrfs /home
+
+================ RUN 1 ================
+netlib log benchmark (dir=., throughput_n=500000, latency_n=100000)
+Note: msg/s, MB/s, front(ms) reflect business-thread submission time;
+      total(ms) includes final flush/Stop(); avg/p50/p99/max are per-call latency.
+
+=== [backend] threads=1 ===
+mode           |        msg/s |     MB/s | front(ms) | total(ms) |  avg(us) |  p50(us) |  p99(us) |   max(us) | check
+---------------+--------------+----------+-----------+-----------+----------+----------+----------+-----------+-------
+sync-buffered  |     11567431 |   1103.2 |      43.2 |      43.3 |    0.111 |    0.030 |    2.966 |      33.6 | OK
+sync-flush     |       424163 |     40.5 |    1178.8 |    1178.8 |    2.349 |    2.234 |    4.899 |     192.8 | OK
+async          |     29432757 |   2806.9 |      17.0 |      19.2 |    0.032 |    0.030 |    0.050 |      23.4 | OK
+
+=== [backend] threads=4 ===
+mode           |        msg/s |     MB/s | front(ms) | total(ms) |  avg(us) |  p50(us) |  p99(us) |   max(us) | check
+---------------+--------------+----------+-----------+-----------+----------+----------+----------+-----------+-------
+sync-buffered  |      9238979 |    881.1 |      54.1 |      54.1 |    0.642 |    0.030 |    6.482 |     463.9 | OK
+sync-flush     |       319764 |     30.5 |    1563.7 |    1563.7 |   11.446 |    2.946 |   15.159 |   12868.3 | OK
+async          |     14774480 |   1409.0 |      33.8 |      34.1 |    0.522 |    0.091 |    4.378 |      79.9 | OK
+
+=== [logger] threads=1 ===
+mode           |        msg/s |     MB/s | front(ms) | total(ms) |  avg(us) |  p50(us) |  p99(us) |   max(us) | check
+---------------+--------------+----------+-----------+-----------+----------+----------+----------+-----------+-------
+sync-buffered  |      1399398 |    133.2 |     357.3 |     357.3 |    0.748 |    0.621 |    3.777 |     171.5 | OK
+sync-flush     |       296512 |     28.2 |    1686.3 |    1686.3 |    3.302 |    3.116 |    6.092 |     176.2 | OK
+async          |      1612598 |    153.4 |     310.1 |     310.3 |    0.617 |    0.611 |    0.632 |      13.7 | OK
+
+=== [logger] threads=4 ===
+mode           |        msg/s |     MB/s | front(ms) | total(ms) |  avg(us) |  p50(us) |  p99(us) |   max(us) | check
+---------------+--------------+----------+-----------+-----------+----------+----------+----------+-----------+-------
+sync-buffered  |      1918233 |    181.3 |     260.7 |     260.7 |    2.064 |    1.193 |   13.185 |     448.4 | OK
+sync-flush     |       243357 |     23.0 |    2054.6 |    2054.6 |   15.924 |    3.807 |   30.657 |   12828.4 | OK
+async          |      2741678 |    259.1 |     182.4 |     182.6 |    1.376 |    0.851 |    5.861 |     870.7 | OK
+
+================ RUN 2 ================
+netlib log benchmark (dir=., throughput_n=500000, latency_n=100000)
+Note: msg/s, MB/s, front(ms) reflect business-thread submission time;
+      total(ms) includes final flush/Stop(); avg/p50/p99/max are per-call latency.
+
+=== [backend] threads=1 ===
+mode           |        msg/s |     MB/s | front(ms) | total(ms) |  avg(us) |  p50(us) |  p99(us) |   max(us) | check
+---------------+--------------+----------+-----------+-----------+----------+----------+----------+-----------+-------
+sync-buffered  |     11335727 |   1081.1 |      44.1 |      44.1 |    0.103 |    0.030 |    2.725 |      77.4 | OK
+sync-flush     |       444917 |     42.4 |    1123.8 |    1123.8 |    2.239 |    2.134 |    4.709 |     180.4 | OK
+async          |     33684449 |   3212.4 |      14.8 |      18.7 |    0.032 |    0.030 |    0.050 |      11.2 | OK
+
+=== [backend] threads=4 ===
+mode           |        msg/s |     MB/s | front(ms) | total(ms) |  avg(us) |  p50(us) |  p99(us) |   max(us) | check
+---------------+--------------+----------+-----------+-----------+----------+----------+----------+-----------+-------
+sync-buffered  |      9697548 |    924.8 |      51.6 |      51.6 |    0.684 |    0.031 |    8.205 |     257.9 | OK
+sync-flush     |       315117 |     30.1 |    1586.7 |    1586.7 |   11.673 |    2.975 |   11.060 |   21431.8 | OK
+async          |     16249157 |   1549.6 |      30.8 |      31.1 |    0.511 |    0.090 |    4.318 |     310.0 | OK
+
+=== [logger] threads=1 ===
+mode           |        msg/s |     MB/s | front(ms) | total(ms) |  avg(us) |  p50(us) |  p99(us) |   max(us) | check
+---------------+--------------+----------+-----------+-----------+----------+----------+----------+-----------+-------
+sync-buffered  |      1419015 |    135.0 |     352.4 |     352.4 |    0.705 |    0.621 |    3.667 |     177.1 | OK
+sync-flush     |       301677 |     28.7 |    1657.4 |    1657.4 |    3.411 |    3.196 |    6.312 |     199.1 | OK
+async          |      1592642 |    151.5 |     313.9 |     314.3 |    0.621 |    0.611 |    0.762 |      44.9 | OK
+
+=== [logger] threads=4 ===
+mode           |        msg/s |     MB/s | front(ms) | total(ms) |  avg(us) |  p50(us) |  p99(us) |   max(us) | check
+---------------+--------------+----------+-----------+-----------+----------+----------+----------+-----------+-------
+sync-buffered  |      1845468 |    174.4 |     270.9 |     270.9 |    2.115 |    1.193 |   13.515 |     437.4 | OK
+sync-flush     |       236026 |     22.3 |    2118.4 |    2118.4 |   16.017 |    3.948 |   22.532 |   13479.7 | OK
+async          |      2716789 |    256.8 |     184.0 |     184.4 |    1.446 |    1.212 |    6.662 |     630.9 | OK
+
+================ RUN 3 ================
+netlib log benchmark (dir=., throughput_n=500000, latency_n=100000)
+Note: msg/s, MB/s, front(ms) reflect business-thread submission time;
+      total(ms) includes final flush/Stop(); avg/p50/p99/max are per-call latency.
+
+=== [backend] threads=1 ===
+mode           |        msg/s |     MB/s | front(ms) | total(ms) |  avg(us) |  p50(us) |  p99(us) |   max(us) | check
+---------------+--------------+----------+-----------+-----------+----------+----------+----------+-----------+-------
+sync-buffered  |     10974671 |   1046.6 |      45.6 |      45.6 |    0.117 |    0.030 |    3.066 |     193.3 | OK
+sync-flush     |       422732 |     40.3 |    1182.8 |    1182.8 |    2.432 |    2.264 |    5.210 |      64.8 | OK
+async          |     27535458 |   2626.0 |      18.2 |      20.3 |    0.038 |    0.030 |    0.060 |      29.0 | OK
+
+=== [backend] threads=4 ===
+mode           |        msg/s |     MB/s | front(ms) | total(ms) |  avg(us) |  p50(us) |  p99(us) |   max(us) | check
+---------------+--------------+----------+-----------+-----------+----------+----------+----------+-----------+-------
+sync-buffered  |      9454056 |    901.6 |      52.9 |      52.9 |    0.683 |    0.040 |    8.255 |     438.2 | OK
+sync-flush     |       312900 |     29.8 |    1598.0 |    1598.0 |   10.596 |    2.956 |   12.313 |   14129.5 | OK
+async          |     14087522 |   1343.5 |      35.5 |      36.2 |    0.502 |    0.090 |    4.248 |     382.7 | OK
+
+=== [logger] threads=1 ===
+mode           |        msg/s |     MB/s | front(ms) | total(ms) |  avg(us) |  p50(us) |  p99(us) |   max(us) | check
+---------------+--------------+----------+-----------+-----------+----------+----------+----------+-----------+-------
+sync-buffered  |      1377448 |    131.1 |     363.0 |     363.0 |    0.740 |    0.631 |    3.717 |      79.8 | OK
+sync-flush     |       298209 |     28.4 |    1676.7 |    1676.7 |    3.326 |    3.226 |    5.961 |      99.0 | OK
+async          |      1580626 |    150.4 |     316.3 |     316.8 |    0.639 |    0.631 |    0.782 |      15.4 | OK
+
+=== [logger] threads=4 ===
+mode           |        msg/s |     MB/s | front(ms) | total(ms) |  avg(us) |  p50(us) |  p99(us) |   max(us) | check
+---------------+--------------+----------+-----------+-----------+----------+----------+----------+-----------+-------
+sync-buffered  |      1927243 |    182.2 |     259.4 |     259.4 |    2.060 |    1.202 |   12.734 |      62.4 | OK
+sync-flush     |       235963 |     22.3 |    2119.0 |    2119.0 |   15.949 |    3.957 |   72.056 |   11312.9 | OK
+async          |      2788101 |    263.5 |     179.3 |     179.6 |    1.422 |    1.162 |    5.952 |     255.5 | OK
+
+================ strace -c -f (backend, t=1, count=100000 = 10MB) ================
+--- mode=sync-flush ---
+strace: Process 250772 attached
+single workload=backend mode=sync-flush threads=1 count=100000 dir=.
+  front=1591.41 ms, total=1591.50 ms, throughput=62837 msg/s (6.0 MB/s), avg=15.914 us
+  file_bytes=10000000, file_lines=100000, check=OK
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 61.17    0.614409       76801         8           futex
+ 38.83    0.389985           3    100001           write
+------ ----------- ----------- --------- --------- ----------------
+100.00    1.004394          10    100009           total
+--- mode=sync-buffered ---
+strace: Process 250902 attached
+single workload=backend mode=sync-buffered threads=1 count=100000 dir=.
+  front=42.17 ms, total=42.28 ms, throughput=2371402 msg/s (226.2 MB/s), avg=0.422 us
+  file_bytes=10000000, file_lines=100000, check=OK
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 62.08    0.014706        1470        10         1 futex
+ 37.92    0.008981           3      2443           write
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.023687           9      2453         1 total
+--- mode=async ---
+strace: Process 250952 attached
+strace: Process 250953 attached
+single workload=backend mode=async threads=1 count=100000 dir=.
+  front=2.69 ms, total=4.87 ms, throughput=37229001 msg/s (3550.4 MB/s), avg=0.027 us
+  file_bytes=10000000, file_lines=100000, check=OK
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 71.21    0.004942         353        14         2 futex
+ 28.79    0.001998         199        10           write
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.006940         289        24         2 total
